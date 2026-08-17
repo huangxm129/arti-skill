@@ -1,0 +1,12 @@
+interface:
+  display_name: "ARTi 单股研究"
+  short_description: "研究单只股票并调用 ARTi 行情、研报、额度与记忆能力"
+  default_prompt: "使用 $arti-stock-research 研究贵州茅台，比较最新事实与我的历史观点。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "arti-market"
+      description: "ARTi 市场数据与研报证据 MCP 服务"
+      transport: "streamable_http"
+      url: "https://mcp-market-production.up.railway.app/mcp"
