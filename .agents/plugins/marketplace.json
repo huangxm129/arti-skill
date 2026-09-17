@@ -1,0 +1,20 @@
+{
+  "name": "arti-skills",
+  "interface": {
+    "displayName": "ARTI Skills"
+  },
+  "plugins": [
+    {
+      "name": "arti-stock-research",
+      "source": {
+        "source": "local",
+        "path": "./plugins/arti-stock-research"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Finance"
+    }
+  ]
+}

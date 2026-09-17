@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+# ARTI 单股研究 Skill 命令行助手（零第三方依赖：curl + jq/python3 之一）
+# 契约来源：Arti 主仓 docs/rfcs/0155-arti-skills-public-skill.md
+set -euo pipefail
+
+VERSION="0.1.0-alpha"
+
+# ── 服务端地址与凭证（联调期可用环境变量覆盖，不要改脚本本体）────
+ARTI_API_BASE="${ARTI_API_BASE:-}"   # 默认留空：由下方 config.json 与兜底行决定
+ARTI_CRED_FILE="${ARTI_CRED_FILE:-$HOME/.arti/credentials.json}"
+ARTI_CLIENT_NAME="arti-skills"
+ARTI_POLL_TIMEOUT="${ARTI_POLL_TIMEOUT:-600}"   # 授权轮询总时长（秒），服务端 session TTL 为 10 分钟
+
+# ── 端点路径（契约演进时只改这里）──────────────────────────────
+EP_CLI_AUTH="functions/v1/cli-auth"             # POST action=start / action=poll
+EP_KEY_EXCHANGE="functions/v1/chat-api-keys"    # POST action=exchange_device_code → 签发 sk-arti- key
+EP_SCAN="functions/v1/v1-scan-stock"            # POST {symbol}（5 Credits）
+EP_CREDITS="functions/v1/v1-credits"            # GET（0 Credits）
+EP_MEMORY="functions/v1/v1-memory"              # GET/POST/DELETE（0 Credits）
+
+C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_YLW=$'\033[33m'; C_DIM=$'\033[2m'; C_RST=$'\033[0m'
+RESP=""
+HTTP_STATUS=""
+RESP_FILE="$(mktemp "${TMPDIR:-/tmp}/arti-resp.XXXXXX")"
+trap 'rm -f "$RESP_FILE"' EXIT
+
+usage() {
+  cat <<EOF
+ARTI 单股研究助手 v$VERSION
+
+用法: arti <命令>
+
+  login                                    设备码授权（浏览器注册/登录 + 换取 API key）
+  status                                   登录状态与账户概览
+  balance                                  Credits 余额、会员档、可领取任务
+  scan <SYMBOL> [--yes]                    快速诊断（5 Credits；--yes 表示已获用户确认）
+  memory get [SYMBOL]                      读取记忆（无参 = 全部）
+  memory save --confirmed <SYMBOL|global> <kind> "<内容>"
+  memory forget --confirmed <ID>
+  logout                                   删除本地凭证并请求吊销 API key
+
+环境变量: ARTI_API_BASE / ARTI_CRED_FILE / ARTI_POLL_TIMEOUT / ARTI_CHANNEL
+EOF
+}
+
+die() { printf '%s%s%s\n' "$C_RED" "$*" "$C_RST" >&2; exit 1; }
+info() { printf '%s%s%s\n' "$C_DIM" "$*" "$C_RST"; }
+ok()   { printf '%s%s%s\n' "$C_GRN" "$*" "$C_RST"; }
+warn() { printf '%s%s%s\n' "$C_YLW" "$*" "$C_RST" >&2; }
+
+# ── JSON 工具（优先 jq，缺则用 python3 兜底）──────────────────
+json_get() { # json_get <json串> <点分路径>；结果输出到 stdout（可为空）
+  local json="$1" path="$2" out=""
+  if command -v jq >/dev/null 2>&1; then
+    out="$(printf '%s' "$json" | jq -r --arg p "$path" 'getpath($p | split(".")) // empty' 2>/dev/null || true)"
+  elif command -v python3 >/dev/null 2>&1; then
+    out="$(printf '%s' "$json" | python3 -c '
+import json,sys
+try:
+    node=json.load(sys.stdin)
+    for key in sys.argv[1].split("."):
+        node=node[key] if isinstance(node,dict) and key in node else None
+        if node is None: break
+    print(node if node is not None else "")
+except Exception:
+    print("")
+' "$path" 2>/dev/null || true)"
+  else
+    warn "需要 jq 或 python3 之一用于解析响应（macOS: brew install jq）"
+    return 1
+  fi
+  [ "$out" != "null" ] && printf '%s' "$out"
+  return 0
+}
+
+# ── 可选配置：~/.arti/config.json {"api_base":"http://127.0.0.1:54321"} ──
+# 本地联调切换用；环境变量 ARTI_API_BASE 优先级最高，删掉 config.json 即回生产默认。
+ARTI_CONFIG_FILE="${ARTI_CONFIG_FILE:-$HOME/.arti/config.json}"
+if [ -z "${ARTI_API_BASE:-}" ] && [ -f "$ARTI_CONFIG_FILE" ]; then
+  ARTI_API_BASE="$(json_get "$(cat "$ARTI_CONFIG_FILE")" api_base)"
+fi
+ARTI_API_BASE="${ARTI_API_BASE:-https://www.artifin.ai}"
+
+require_credentials() {
+  [ -f "$ARTI_CRED_FILE" ] || die "未登录。请先运行: arti login"
+  API_KEY="$(json_get "$(cat "$ARTI_CRED_FILE")" api_key)"
+  [ -n "$API_KEY" ] || die "凭证文件损坏，请重新运行: arti logout && arti login"
+}
+
+# ── HTTP 封装：调用后读取全局 RESP / HTTP_STATUS（不要放进 $() ）──
+api() { # api <METHOD> <endpoint-path> [json-body]
+  local method="$1" path="$2" body="${3-}" args=() code
+  args=(-sS -X "$method" "$ARTI_API_BASE/$path" -H "Content-Type: application/json" -o "$RESP_FILE" -w '%{http_code}')
+  [ -n "$body" ] && args+=(-d "$body")
+  # 注意：API_KEY 可能为空，禁止预先构造空数组再展开（bash 3.2 + set -u 会报 unbound）
+  if [ -n "${API_KEY:-}" ]; then args+=(-H "Authorization: Bearer $API_KEY"); fi
+  if code="$(curl "${args[@]}")"; then
+    HTTP_STATUS="$code"
+    RESP="$(cat "$RESP_FILE")"
+  else
+    HTTP_STATUS="000"
+    RESP='{"error":{"code":"network_error","message":"无法连接 ARTI 服务端"}}'
+  fi
+}
+
+# 统一错误呈现：结构化 insufficient_credits → 模板；其余 → 透传（读全局 RESP）
+handle_error() {
+  local code required available tasks_url sub_url credits_url
+  code="$(json_get "$RESP" error.code)"
+  if [ "$code" = "insufficient_credits" ] || [ "$code" = "INSUFFICIENT_CREDITS" ]; then
+    required="$(json_get "$RESP" error.details.requiredCredits)"; [ -n "$required" ] || required="$(json_get "$RESP" error.requiredCredits)"
+    available="$(json_get "$RESP" error.details.availableCredits)"; [ -n "$available" ] || available="$(json_get "$RESP" error.availableCredits)"
+    tasks_url="$(json_get "$RESP" error.details.actions.tasksUrl)"; [ -n "$tasks_url" ] || tasks_url="$(json_get "$RESP" error.actions.tasksUrl)"
+    sub_url="$(json_get "$RESP" error.details.actions.subscriptionUrl)"; [ -n "$sub_url" ] || sub_url="$(json_get "$RESP" error.actions.subscriptionUrl)"
+    credits_url="$(json_get "$RESP" error.details.actions.creditsUrl)"; [ -n "$credits_url" ] || credits_url="$(json_get "$RESP" error.actions.creditsUrl)"
+    warn "ARTI Credits 不足（不是 Codex token）：本次需要 ${required}，当前余额 ${available}。"
+    print_credit_actions "$tasks_url" "$sub_url" "$credits_url"
+    info "余额降到 20 以下时 ARTI 会自动一次性赠送 100 Credits。"
+    exit 2
+  fi
+  die "请求失败（HTTP ${HTTP_STATUS}）：$(json_get "$RESP" error.message)"
+}
+
+print_credit_actions() {
+  local tasks_url="$1" sub_url="$2" credits_url="$3"
+  [ -n "$tasks_url" ] && warn "  - 做任务赚 Credits：${tasks_url}"
+  [ -n "$sub_url" ] && warn "  - 购买会员：${sub_url}"
+  [ -n "$credits_url" ] && warn "  - 充值 Credits：${credits_url}"
+}
+
+# ── 命令：login ───────────────────────────────────────────────
+detect_channel() {
+  [ -n "${ARTI_CHANNEL:-}" ] && { echo "$ARTI_CHANNEL"; return; }
+  if [ -n "${CODEX_HOME:-}" ] || command -v codex >/dev/null 2>&1; then echo codex
+  elif [ -d "$HOME/.claude" ] || command -v claude >/dev/null 2>&1; then echo claude-code
+  elif [ -d "$HOME/.agents" ]; then echo zcode
+  else echo manual; fi
+}
+
+cmd_login() {
+  command -v curl >/dev/null 2>&1 || die "需要 curl"
+  local channel resp sid ptok interval login_url
+  channel="$(detect_channel)"
+  api POST "$EP_CLI_AUTH" "{\"action\":\"start\",\"client_name\":\"$ARTI_CLIENT_NAME\",\"channel\":\"$channel\"}"
+  [ "$HTTP_STATUS" = "200" ] || handle_error
+  login_url="$(json_get "$RESP" data.login_url)"; [ -n "$login_url" ] || login_url="$(json_get "$RESP" login_url)"
+  [ -n "$login_url" ] || die "服务端未返回登录链接（HTTP ${HTTP_STATUS}）"
+  sid="$(json_get "$RESP" data.session_id)";  [ -n "$sid" ]  || sid="$(json_get "$RESP" session_id)"
+  ptok="$(json_get "$RESP" data.poll_token)"; [ -n "$ptok" ] || ptok="$(json_get "$RESP" poll_token)"
+  interval="$(json_get "$RESP" data.poll_interval_ms)"; case "$interval" in ''|*[!0-9]*) interval=2000 ;; esac
+
+  echo
+  ok  "① 在浏览器打开下面的链接完成 ARTI 注册/登录（新用户赠 100 Credits）："
+  echo "    $login_url"
+  echo
+  ok  "② 登录后按页面提示确认本次授权（会话 10 分钟内有效）。"
+  info "开始等待授权完成……（Ctrl-C 取消）"
+
+  local waited=0 key status
+  while [ "$waited" -lt "$ARTI_POLL_TIMEOUT" ]; do
+    sleep $(( interval / 1000 )); waited=$(( waited + interval / 1000 ))
+    # 服务端 poll 是 GET + query 参数（cli-auth 契约），不要改成 POST body
+    api GET "$EP_CLI_AUTH?session_id=$sid&poll_token=$ptok"
+    [ "$HTTP_STATUS" = "200" ] && [ -n "$RESP" ] || continue   # 网络抖动等瞬态失败，继续轮询
+    status="$(json_get "$RESP" data.status)"; [ -n "$status" ] || status="$(json_get "$RESP" status)"
+    case "$status" in
+      approved|exchanged)
+        api POST "$EP_KEY_EXCHANGE" "{\"action\":\"exchange_device_code\",\"session_id\":\"$sid\",\"poll_token\":\"$ptok\"}"
+        [ "$HTTP_STATUS" = "200" ] || handle_error
+        key="$(json_get "$RESP" data.api_key)"; [ -n "$key" ] || key="$(json_get "$RESP" api_key)"
+        [ -n "$key" ] || die "授权已确认但换取 key 失败，请重试: arti login"
+        mkdir -p "$(dirname "$ARTI_CRED_FILE")"
+        chmod 700 "$(dirname "$ARTI_CRED_FILE")" 2>/dev/null || true   # 已存在的目录（如 /tmp）不强制改权限
+        printf '{"api_key":"%s","channel":"%s","created_at":"%s"}\n' "$key" "$channel" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$ARTI_CRED_FILE"
+        chmod 600 "$ARTI_CRED_FILE"
+        ok "③ 授权完成，凭证已写入 ${ARTI_CRED_FILE}（权限 600）"
+        ok "可以开始使用了，试试: arti scan AAPL --yes"
+        return 0 ;;
+      denied)  die "授权被拒绝" ;;
+      expired) die "授权会话已过期（10 分钟），请重新运行: arti login" ;;
+      *) : ;;  # pending → 继续轮询
+    esac
+  done
+  die "等待授权超时，请重新运行: arti login"
+}
+
+# ── 命令：status / balance ────────────────────────────────────
+cmd_status() {
+  if ! [ -f "$ARTI_CRED_FILE" ]; then
+    warn "未登录（无 ${ARTI_CRED_FILE}）。运行 arti login 完成授权。"
+    exit 1
+  fi
+  ok "已登录（channel: $(json_get "$(cat "$ARTI_CRED_FILE")" channel)）"
+  cmd_balance
+}
+
+cmd_balance() {
+  local balance tasks_url sub_url credits_url
+  require_credentials
+  api GET "$EP_CREDITS"
+  [ "$HTTP_STATUS" = "200" ] || handle_error
+  balance="$(json_get "$RESP" data.balance)"
+  printf 'Credits 余额: %s\n' "$balance"
+  printf '会员档位:     %s\n' "$(json_get "$RESP" data.tier)"
+  printf '可领取任务:   %s\n' "$(json_get "$RESP" data.claimableTasks)"
+  if [ "$balance" = "0" ]; then
+    tasks_url="$(json_get "$RESP" data.actions.tasksUrl)"
+    sub_url="$(json_get "$RESP" data.actions.subscriptionUrl)"
+    credits_url="$(json_get "$RESP" data.actions.creditsUrl)"
+    warn "ARTI Credits 余额为 0（不是 Codex token），可通过以下方式继续使用："
+    print_credit_actions "$tasks_url" "$sub_url" "$credits_url"
+  fi
+}
+
+# ── 命令：scan ────────────────────────────────────────────────
+cmd_scan() {
+  local symbol="" confirmed=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --yes|-y) confirmed=1 ;;
+      *) symbol="$1" ;;
+    esac; shift
+  done
+  [ -n "$symbol" ] || die "用法: arti scan <SYMBOL> [--yes]"
+  [ "$confirmed" = 1 ] || die "快速诊断消耗 5 ARTI Credits。与用户确认后加 --yes 执行。"
+  require_credentials
+  info "正在请求 ARTI 快速诊断（${symbol}，5 Credits）……"
+  api POST "$EP_SCAN" "{\"symbol\":\"$symbol\"}"
+  [ "$HTTP_STATUS" = "200" ] || handle_error
+  printf '%s\n' "$RESP"
+}
+
+# ── 命令：memory ──────────────────────────────────────────────
+cmd_memory() {
+  local sub="${1:-get}"; shift || true
+  case "$sub" in
+    get)
+      local symbol="${1:-}" url
+      require_credentials
+      url="$EP_MEMORY"; [ -n "$symbol" ] && url="$EP_MEMORY?symbol=$symbol"
+      api GET "$url"
+      [ "$HTTP_STATUS" = "200" ] || handle_error
+      printf '%s\n' "$RESP" ;;
+    save)
+      [ "${1:-}" = "--confirmed" ] || die "记忆写入必须来自用户明确指令：arti memory save --confirmed <SYMBOL|global> <kind> \"<内容>\""
+      shift
+      local scope="${1:-}" kind="${2:-}" content="" json_symbol="null" json_scope symbol_json
+      shift 2 || true
+      content="${*:-}"
+      [ -n "$scope" ] && [ -n "$kind" ] && [ -n "$content" ] || die "用法: arti memory save --confirmed <SYMBOL|global> <kind> \"<内容>\""
+      require_credentials
+      if [ "$scope" = "global" ]; then json_scope="global"; else json_scope="symbol"; json_symbol="\"$scope\""; fi
+      symbol_json="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$content" 2>/dev/null || printf '"%s"' "$content")"
+      api POST "$EP_MEMORY" "{\"scope\":\"$json_scope\",\"symbol\":$json_symbol,\"kind\":\"$kind\",\"content\":$symbol_json,\"confirmed\":true}"
+      case "$HTTP_STATUS" in 200|201) ;; *) handle_error ;; esac
+      ok "已记住。" ;;
+    forget)
+      [ "${1:-}" = "--confirmed" ] || die "用法: arti memory forget --confirmed <ID>"
+      shift
+      local id="${1:-}"; [ -n "$id" ] || die "缺少记忆 ID"
+      require_credentials
+      api DELETE "$EP_MEMORY/$id"
+      [ "$HTTP_STATUS" = "200" ] || handle_error
+      ok "已遗忘（保留审计链）。" ;;
+    *) die "用法: arti memory get|save|forget" ;;
+  esac
+}
+
+# ── 命令：logout ──────────────────────────────────────────────
+cmd_logout() {
+  if [ -f "$ARTI_CRED_FILE" ]; then
+    API_KEY="$(json_get "$(cat "$ARTI_CRED_FILE")" api_key)" && revoke_skill_keys || true
+    rm -f "$ARTI_CRED_FILE"
+    ok "本地凭证已删除，skill 签发的 API key 已请求吊销。"
+  else
+    info "本来就没有本地凭证。"
+  fi
+}
+
+# 吊销 label 以 arti-skills 开头的所有未撤销 key（list → revoke，owner-scoped）
+revoke_skill_keys() {
+  api POST "$EP_KEY_EXCHANGE" '{"action":"list"}'
+  [ "$HTTP_STATUS" = "200" ] || return 0
+  local ids
+  ids="$(printf '%s' "$RESP" | jq -r '.data.keys[]? | select((.label // "") | startswith("arti-skills")) | select(.revoked_at == null) | .id' 2>/dev/null || true)"
+  [ -n "$ids" ] || ids="$(printf '%s' "$RESP" | python3 -c '
+import json,sys
+try:
+    for k in json.load(sys.stdin).get("data",{}).get("keys",[]):
+        if (k.get("label") or "").startswith("arti-skills") and not k.get("revoked_at"):
+            print(k["id"])
+except Exception:
+    pass
+' 2>/dev/null || true)"
+  local id
+  for id in $ids; do
+    api POST "$EP_KEY_EXCHANGE" "{\"action\":\"revoke\",\"id\":\"$id\"}" >/dev/null || true
+  done
+}
+
+# ── 入口 ──────────────────────────────────────────────────────
+API_KEY=""
+cmd="${1:-}"; [ $# -gt 0 ] && shift || true
+case "$cmd" in
+  login)   cmd_login "$@" ;;
+  status)  cmd_status ;;
+  balance) cmd_balance ;;
+  scan)    cmd_scan "$@" ;;
+  memory)  cmd_memory "$@" ;;
+  logout)  cmd_logout ;;
+  version|--version|-v) echo "arti v$VERSION" ;;
+  help|--help|-h|"") usage ;;
+  *) usage; exit 1 ;;
+esac

@@ -1,0 +1,34 @@
+{
+  "name": "arti-stock-research",
+  "version": "0.1.0",
+  "description": "ARTI 单股研究：数据驱动的快速诊断、跨会话股票记忆与 Credits 账户管理，扫码注册即用",
+  "author": {
+    "name": "ARTI (botearn)",
+    "url": "https://github.com/huangxm129/arti-skill"
+  },
+  "homepage": "https://github.com/huangxm129/arti-skill",
+  "repository": "https://github.com/huangxm129/arti-skill",
+  "license": "MIT",
+  "keywords": ["finance", "stock", "stocks", "research", "equity", "investment", "估值", "研报", "行情", "投资", "股票", "股票分析", "投研", "单股研究", "A股", "港股", "美股"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "ARTI 单股研究",
+    "shortDescription": "AI 投研：单股快速诊断 · 股票记忆 · Credits 管理",
+    "longDescription": "ARTI（artifin.ai）的 AI 投研能力打包：对任意 A 股 / 港股 / 美股做数据驱动的快速诊断（行情快照、技术面、规则信号、买卖判断），跨会话记住你对每只股票的观点与关注条件，随时查询 ARTI Credits 余额。首次使用在浏览器完成 ARTI 注册/登录并确认授权（新用户赠 100 Credits），无需粘贴任何密钥。快速诊断消耗 ARTI Credits（5 Credits/次），记忆与账户查询免费；余额为 0 或不足时自动给出做任务、购买会员与充值 Credits 的跳转链接。",
+    "developerName": "ARTI (botearn)",
+    "category": "Finance",
+    "capabilities": ["Interactive"],
+    "websiteURL": "https://www.artifin.ai/",
+    "privacyPolicyURL": "https://github.com/huangxm129/arti-skill/blob/main/PRIVACY.md",
+    "termsOfServiceURL": "https://www.artifin.ai/",
+    "defaultPrompt": [
+      "帮我分析一下 AAPL",
+      "用 ARTI 快速诊断 00700.HK",
+      "查一下我的 ARTI Credits 余额"
+    ],
+    "brandColor": "#0F6B5C",
+    "composerIcon": "./assets/composer-icon.png",
+    "logo": "./assets/logo.png",
+    "logoDark": "./assets/logo-dark.png"
+  }
+}
