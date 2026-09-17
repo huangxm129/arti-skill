@@ -4,6 +4,17 @@
 
 > 当前版本已经接入公开的 ARTi Market MCP，可用于市场数据和基础研究。OAuth 登录、ARTi Credits、付费深度研报和账户级私有记忆已定义好交互规范，但仍需 ARTi Authenticated MCP Gateway 上线后才能真正使用。
 
+## Alpha CLI 与 Codex 插件包
+
+本仓库同时收录 `arti-skills-v0.1.0-alpha-test` 的完整发布内容。根目录 `SKILL.md`、`agents/` 与 `references/` 保留现有 MCP 工作流；`plugins/arti-stock-research/` 提供独立的 Alpha CLI/插件工作流，服务端可用性以实际联调结果为准。
+
+- [Alpha 安装与使用说明](docs/alpha-cli-guide.md)
+- [插件与 CLI 源码](plugins/arti-stock-research/)
+- [安装脚本](install.sh)、[隐私说明](PRIVACY.md)、[MIT 许可证](LICENSE)
+- [市场提交说明](docs/marketplace-submission.md)
+
+本地验证：`bash -n install.sh`、`bash -n plugins/arti-stock-research/skills/arti-stock-research/scripts/arti`、`node --test scripts/arti-credits.test.mjs`。
+
 ## 主要能力
 
 - 解析 A 股、港股和美股公司名称、代码及交易所。
