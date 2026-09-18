@@ -83,6 +83,10 @@ For quick factual questions, answer directly without forcing the full report tem
 
 如果 MCP 工具发现成功但调用出现 `No module named`、`deps not initialized`、HTTP 5xx、超时或网络错误，按 [references/mcp-fallback.md](references/mcp-fallback.md) 处理：保留已有证据，免费请求可切换到本仓库随附的 Alpha CLI 备用路径；CLI 会消耗 Credits 时必须先征得用户明确确认。401/403、参数错误和证券不存在不得自动切换数据源。
 
+## MCP 连接检查
+
+安装 Skill 不等于宿主已连接 MCP。需要确认连接时，先运行仓库内的 `node scripts/check-mcp.mjs`；它会检查健康端点、MCP 初始化、会话 ID 和核心工具。只有输出 `passed: true` 后才开始研究；若检查通过但当前会话没有工具，提示用户重启宿主 Agent 或在 MCP 设置中手动添加 `arti-market`。
+
 ## Failure policy
 
 - Return partial research when some independent sources fail; list the missing dimensions.
