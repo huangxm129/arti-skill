@@ -74,7 +74,7 @@ npx skills add huangxm129/arti-skill
 node scripts/check-mcp.mjs
 ```
 
-该命令会依次检查 MCP 健康状态、协议初始化、会话建立和核心工具发现。
+该命令会依次检查 MCP 健康状态、协议初始化、会话建立和当前 23 个工具是否全部发现，并在输出中列出实际加载的工具。
 
 插件包同时包含 `.mcp.json`，安装插件后会自动注册 `arti-market`。更新插件配置后请新建 Codex 会话；已有会话不会重新加载 MCP 工具。
 

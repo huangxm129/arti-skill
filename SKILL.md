@@ -5,7 +5,11 @@ description: Research one publicly traded stock with ARTi market data, financial
 
 # ARTi 单股研究
 
-Use ARTi as the factual and account boundary for one-stock research. Keep market facts, paid research, identity, credits, and memory distinct.
+Use ARTi as the factual and account boundary for one-stock research. Keep market facts, paid research, identity, credits, and memory distinct. The current ARTi Market MCP exposes 23 tools, including quote, order book, trades, minute/daily bars, technical indicators, company and financial data, macro/market data, and report evidence tools; discover the live schema rather than assuming a tool exists.
+
+## 首次使用必须先登录
+
+第一次触发本 Skill 时，先检查 ARTi 登录状态，不要先做行情分析，也不要先调用付费诊断。优先运行随插件提供的 `scripts/arti status`；如果未登录，立即运行 `scripts/arti login`，把返回的浏览器授权链接和短期确认信息展示给用户，引导用户打开链接完成注册/登录。等待授权完成后再继续原请求；授权失败或超时就停止并说明原因。不要要求用户粘贴 API key、密码或长期 Token。
 
 ## Core rules
 
@@ -33,7 +37,7 @@ Use ARTi as the factual and account boundary for one-stock research. Keep market
 
 ### 3. Select the execution mode
 
-Use **Agent self-research** when the user asks for a quote, quick analysis, a specific dimension, or ordinary single-stock research. Retrieve ARTi facts and perform synthesis in the host Agent. This consumes host Agent tokens; ARTi data calls may have their own server-declared policy.
+Use **Agent self-research** when the user asks for a quote, quick analysis, a specific dimension, or ordinary single-stock research. Retrieve ARTi facts and perform synthesis in the host Agent. This consumes host Agent tokens; ARTi data calls may have their own server-declared policy. Only enter this mode after the login preflight succeeds or the host explicitly confirms an already authenticated ARTi MCP session.
 
 Use **ARTi deep research** only when all conditions hold:
 
