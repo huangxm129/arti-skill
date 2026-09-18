@@ -74,7 +74,7 @@ npx skills add huangxm129/arti-skill
 node scripts/check-mcp.mjs
 ```
 
-该命令会依次检查 MCP 健康状态、协议初始化、会话建立和当前 23 个工具是否全部发现，并在输出中列出实际加载的工具。
+该命令会依次检查 MCP 健康状态、标准协议握手、`notifications/initialized`、会话复用和当前 23 个工具是否全部发现，并在输出中列出实际加载的工具。对瞬时 502/503/504、超时和网络错误会进行少量重试，并在失败时输出具体阶段；不会把 502 解释成“没有数据”。设置 `ARTI_MCP_SMOKE_SYMBOL=600519.SS` 可在发现工具后额外做一次免费行情冒烟调用。
 
 插件包同时包含 `.mcp.json`，安装插件后会自动注册 `arti-market`。更新插件配置后请新建 Codex 会话；已有会话不会重新加载 MCP 工具。
 

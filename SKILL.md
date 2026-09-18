@@ -85,11 +85,13 @@ For quick factual questions, answer directly without forcing the full report tem
 
 ## MCP 连接故障降级
 
-如果 MCP 工具发现成功但调用出现 `No module named`、`deps not initialized`、HTTP 5xx、超时或网络错误，按 [references/mcp-fallback.md](references/mcp-fallback.md) 处理：保留已有证据，免费请求可切换到本仓库随附的 Alpha CLI 备用路径；CLI 会消耗 Credits 时必须先征得用户明确确认。401/403、参数错误和证券不存在不得自动切换数据源。
+如果 MCP 工具发现成功但调用出现 `No module named`、`deps not initialized`、HTTP 502/503/504、超时或网络错误，按 [references/mcp-fallback.md](references/mcp-fallback.md) 处理：保留已有证据，免费请求可切换到本仓库随附的 Alpha CLI 备用路径；CLI 会消耗 Credits 时必须先征得用户明确确认。401/403、参数错误和证券不存在不得自动切换数据源。HTTP 502 只表示连接或上游基础设施失败，不等于行情、财务或技术数据为空。
 
 ## MCP 连接检查
 
-安装 Skill 不等于宿主已连接 MCP。需要确认连接时，先运行仓库内的 `node scripts/check-mcp.mjs`；它会检查健康端点、MCP 初始化、会话 ID 和核心工具。只有输出 `passed: true` 后才开始研究；若检查通过但当前会话没有工具，提示用户重启宿主 Agent 或在 MCP 设置中手动添加 `arti-market`。
+安装 Skill 不等于宿主已连接 MCP。需要确认连接时，先运行仓库内的 `node scripts/check-mcp.mjs`；它会检查健康端点、标准 MCP 握手、`notifications/initialized`、会话 ID 和当前核心工具。检查脚本会对瞬时 502/503/504、超时和网络错误进行少量重试，并把失败阶段写入 JSON；不会重试认证、参数或工具契约错误。只有输出 `passed: true` 后才开始研究；若检查通过但当前会话没有工具，提示用户新建宿主 Agent 会话或在 MCP 设置中手动添加 `arti-market`。
+
+可选地设置 `ARTI_MCP_SMOKE_SYMBOL=600519.SS`，在工具发现后使用同一会话免费调用一次 `get_realtime_quote` 做链路冒烟；未设置时不调用工具。
 
 ## Failure policy
 

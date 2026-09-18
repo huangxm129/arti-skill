@@ -101,7 +101,9 @@ printf '%s' "$TARGETS" | while IFS= read -r t; do
   mkdir -p "$dir"
   rm -rf "$dir/$SKILL"
   cp -R "$SRC" "$dir/$SKILL"
+  cp "$SRC/../../../../scripts/check-mcp.mjs" "$dir/$SKILL/scripts/check-mcp.mjs"
   chmod +x "$dir/$SKILL/scripts/arti" 2>/dev/null || true
+  chmod +x "$dir/$SKILL/scripts/check-mcp.mjs" 2>/dev/null || true
   ok "[$name] 已安装到 $dir/$SKILL"
 done
 
