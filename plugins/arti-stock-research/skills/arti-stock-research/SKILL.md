@@ -79,4 +79,6 @@ scripts/arti logout                    # 删除本地凭证并吊销 key
 
 ## MCP 连接故障降级
 
-MCP 基础设施错误时，按 `scripts/arti scan <SYMBOL> --yes` 走备用路径；消耗 Credits 前必须获得用户明确确认。
+MCP 基础设施错误（HTTP 502/503/504、超时、网络错误或服务端依赖未初始化）时，先保留已经取得的证据，再按本 Skill 的故障降级规则判断是否走 `scripts/arti scan <SYMBOL> --yes` 备用路径；消耗 Credits 前必须获得用户明确确认。502 表示连接或上游基础设施故障，不等于没有行情、财报或技术数据。401/403、参数错误和证券不存在不得自动切换数据源。
+
+连接诊断使用 `node scripts/check-mcp.mjs`。脚本会完成标准 MCP 握手并复用 `Mcp-Session-Id`；只对瞬时 502/503/504、超时和网络错误做有界重试。只有输出 `passed: true` 后才开始研究。
