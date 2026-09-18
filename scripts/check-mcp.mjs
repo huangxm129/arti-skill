@@ -3,7 +3,16 @@
 const endpoint = (process.env.ARTI_MCP_URL || "https://mcp-market-production.up.railway.app/mcp").replace(/\/$/u, "");
 const healthUrl = process.env.ARTI_MCP_HEALTH_URL || new URL("/health", endpoint).toString();
 const apiKey = process.env.ARTI_MCP_API_KEY?.trim();
-const requiredTools = ["load_stock_context", "get_realtime_quote", "get_technical_indicators", "get_financial_report"];
+const requiredTools = [
+  "get_realtime_quote", "get_order_book", "get_tick_data", "get_minute_bars",
+  "get_technical_indicators", "get_sector_flow", "get_north_flow",
+  "get_stock_fund_flow", "get_stock_info", "get_company_profile",
+  "get_trading_rules", "get_daily_bars", "get_financial_report",
+  "get_dividend_history", "get_market_overview", "get_longhu_list",
+  "get_margin_data", "get_macro_indicators", "get_trade_calendar",
+  "load_stock_context", "get_report_data_review", "get_report_data_trace",
+  "validate_report_sources",
+];
 
 function headers(extra = {}) {
   return { Accept: "application/json, text/event-stream", "Content-Type": "application/json", "MCP-Protocol-Version": "2025-06-18", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}), ...extra };
@@ -28,4 +37,4 @@ if (!Array.isArray(tools)) throw new Error("tools/list 未返回工具数组");
 const names = new Set(tools.map((tool) => tool.name));
 const missing = requiredTools.filter((name) => !names.has(name));
 if (missing.length > 0) throw new Error(`缺少核心工具：${missing.join(", ")}`);
-console.log(JSON.stringify({ endpoint, health: healthPayload, server: initialized.payload?.result?.serverInfo ?? null, session: Boolean(listed.sessionId), requiredTools: requiredTools.length, toolCount: tools.length, passed: true }, null, 2));
+console.log(JSON.stringify({ endpoint, health: healthPayload, server: initialized.payload?.result?.serverInfo ?? null, session: Boolean(listed.sessionId), requiredTools: requiredTools.length, toolCount: tools.length, tools: tools.map((tool) => tool.name), passed: true }, null, 2));
