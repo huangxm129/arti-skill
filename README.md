@@ -68,7 +68,13 @@ Skill 负责识别意图、选择工具和组织输出；ARTi 服务端负责数
 npx skills add huangxm129/arti-skill
 ```
 
-安装器会下载本仓库，并根据其支持情况配置到所选 Agent。`skills` CLI 的行为和支持平台以其[当前文档](https://www.skills.sh/docs/cli)为准。
+安装器会下载本仓库，并根据其支持情况配置到所选 Agent。`skills` CLI 的行为和支持平台以其[当前文档](https://www.skills.sh/docs/cli)为准。安装 Skill 不会保证宿主已经注册 MCP 服务；安装后请先运行：
+
+```bash
+node scripts/check-mcp.mjs
+```
+
+该命令会依次检查 MCP 健康状态、协议初始化、会话建立和核心工具发现。
 
 ### 在 Codex 中安装
 
@@ -115,7 +121,7 @@ npx skills add huangxm129/arti-skill
 | MCP URL | `https://mcp-market-production.up.railway.app/mcp` |
 | 健康检查 | `https://mcp-market-production.up.railway.app/health` |
 
-如果宿主 Agent 不识别 `agents/openai.yaml` 的工具依赖，需要在宿主的 MCP 设置中手动添加上述服务。
+如果宿主 Agent 不识别 `agents/openai.yaml` 的工具依赖，需要在宿主的 MCP 设置中手动添加上述服务。**Skill 安装成功不代表 MCP 已连接**；看到检查命令输出 `"passed": true` 且核心工具齐全后，仍提示未连接时，请重启宿主 Agent 或手动添加 `arti-market`。
 
 可以先检查服务状态：
 
