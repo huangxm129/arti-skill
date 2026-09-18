@@ -76,3 +76,7 @@ scripts/arti logout                    # 删除本地凭证并吊销 key
 ```
 
 支持 A 股（如 `600519.SS` / `000001.SZ`）、港股（`00700.HK`）、美股（`AAPL`）。服务器地址与超时等覆盖项见脚本头部注释（联调期可用环境变量切换）。
+
+## MCP 连接故障降级
+
+MCP 基础设施错误时，按 `scripts/arti scan <SYMBOL> --yes` 走备用路径；消耗 Credits 前必须获得用户明确确认。
