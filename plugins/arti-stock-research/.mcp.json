@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "arti-market": {
+      "type": "http",
+      "url": "https://mcp-market-production.up.railway.app/mcp"
+    }
+  }
+}
