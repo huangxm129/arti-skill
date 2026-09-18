@@ -11,6 +11,7 @@
   "license": "MIT",
   "keywords": ["finance", "stock", "stocks", "research", "equity", "investment", "估值", "研报", "行情", "投资", "股票", "股票分析", "投研", "单股研究", "A股", "港股", "美股"],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "ARTI 单股研究",
     "shortDescription": "AI 投研：单股快速诊断 · 股票记忆 · Credits 管理",

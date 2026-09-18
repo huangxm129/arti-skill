@@ -76,6 +76,8 @@ node scripts/check-mcp.mjs
 
 该命令会依次检查 MCP 健康状态、协议初始化、会话建立和核心工具发现。
 
+插件包同时包含 `.mcp.json`，安装插件后会自动注册 `arti-market`。更新插件配置后请新建 Codex 会话；已有会话不会重新加载 MCP 工具。
+
 ### 在 Codex 中安装
 
 可以直接让 Codex 的 Skill Installer 从 GitHub 安装：
